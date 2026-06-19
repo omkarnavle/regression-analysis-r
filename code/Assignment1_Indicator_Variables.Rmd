@@ -1,0 +1,87 @@
+---
+title: "Assignment 1: Multiple Linear Regression with Indicator (Dummy) Variables"
+author: "Omkar Navle | Roll No: A037 | SAP ID: 86062500050"
+date: "2026-03-24"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Dataset: Hotel Booking Demand | Source: Kaggle
+Dataset link: https://www.kaggle.com/datasets/jessemostipak/hotel-booking-demand
+
+```{r load-library}
+# LOAD LIBRARY
+library(readr)
+```
+
+```{r load-data}
+# LOAD DATA
+# Update this path to where you saved the CSV file
+df <- read_csv("hotel_bookings.csv")
+
+View(df)
+str(df)
+```
+
+```{r summary-statistics}
+# SUMMARY STATISTICS
+summary(df)
+```
+
+```{r missing-values}
+# CHECK MISSING VALUES
+sapply(df, function(x) sum(is.na(x)))
+
+# HANDLE MISSING VALUES
+df$children[is.na(df$children)] <- mean(df$children, na.rm = TRUE)
+df$country[is.na(df$country)]   <- "Unknown"
+df$agent[is.na(df$agent)]       <- 0
+df$company[is.na(df$company)]   <- 0
+
+# VERIFY — all zeros
+sapply(df, function(x) sum(is.na(x)))
+```
+
+```{r correlation}
+# CORRELATION CHECK (NUMERIC VARS)
+cor(df[, c("adr", "lead_time", "stays_in_week_nights")])
+```
+
+```{r boxplot}
+# BOXPLOT — justifying dummy variable need
+boxplot(adr ~ hotel,
+        data  = df,
+        ylim  = c(0, 500),
+        main  = "ADR by Hotel Type",
+        col   = c("lightblue", "lightgreen"))
+```
+
+```{r create-dummy}
+# CREATE DUMMY VARIABLE
+# hotel_dummy = 1 if Resort Hotel (treatment), 0 if City Hotel (reference)
+df$hotel_dummy <- ifelse(df$hotel == "Resort Hotel", 1, 0)
+
+head(df[, c("hotel", "hotel_dummy", "adr", "lead_time", "stays_in_week_nights")])
+```
+
+```{r full-model}
+# FULL MODEL
+model <- lm(adr ~ lead_time + stays_in_week_nights +
+                  previous_bookings_not_canceled + hotel_dummy,
+            data = df)
+
+summary(model)
+```
+
+```{r refined-model}
+# REFINED MODEL (previous_bookings_not_canceled removed)
+model_refined <- lm(adr ~ lead_time + stays_in_week_nights + hotel_dummy,
+                    data = df)
+
+summary(model_refined)
+```

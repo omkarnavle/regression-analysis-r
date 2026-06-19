@@ -1,0 +1,150 @@
+---
+title: "Assignment 2: Autocorrelation in Time-Series Regression"
+author: "Omkar Navle | Roll No: A037 | SAP ID: 86062500050"
+date: "2026-03-24"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## Dataset: Walmart Sales Dataset | Source: Kaggle
+Dataset link: https://www.kaggle.com/datasets/yasserh/walmart-dataset
+
+```{r load-libraries}
+# LOAD LIBRARIES
+library(readr)
+library(lmtest)
+library(nlme)
+```
+
+```{r load-data}
+# LOAD DATA
+# Update this path to where you saved the CSV file
+data <- read_csv("Walmart.csv")
+
+View(data)
+str(data)
+```
+
+```{r summary-statistics}
+# SUMMARY STATISTICS
+summary(data)
+```
+
+```{r preprocess}
+# DATE CONVERSION + SORT BY DATE (critical for time-series ordering)
+data$Date <- as.Date(data$Date, format = "%d-%m-%Y")
+data <- data[order(data$Date), ]
+
+# HANDLE MISSING VALUES
+data <- na.omit(data)
+colSums(is.na(data))
+```
+
+```{r ols-model}
+# OLS MODEL
+model <- lm(Weekly_Sales ~ Temperature + Fuel_Price + CPI + Unemployment,
+            data = data)
+
+summary(model)
+```
+
+```{r plot-residuals-time}
+# PLOT 1: RESIDUALS OVER TIME
+plot(data$Date, residuals(model),
+     type = "l", col = "blue", lwd = 2,
+     main = "Residuals Over Time",
+     xlab = "Time (Date)", ylab = "Residuals")
+
+abline(h = 0, col = "red", lwd = 2, lty = 2)
+```
+
+```{r plot-lag}
+# PLOT 2: RESIDUAL LAG PLOT
+e <- residuals(model)
+
+plot(e[-1], e[-length(e)],
+     col = "darkgreen", pch = 16,
+     main = "Residual Lag Plot",
+     xlab = "Lagged Residuals e(t-1)",
+     ylab = "Residuals e(t)")
+
+abline(lm(e[-1] ~ e[-length(e)]), col = "red", lwd = 2)
+```
+
+```{r plot-histogram}
+# PLOT 3: HISTOGRAM OF RESIDUALS
+hist(residuals(model),
+     col    = "lightblue",
+     border = "black",
+     breaks = 30,
+     main   = "Histogram of Residuals",
+     xlab   = "Residuals")
+
+abline(v = 0, col = "red", lwd = 2)
+```
+
+```{r durbin-watson}
+# DURBIN-WATSON TEST
+dwtest(model)
+```
+
+```{r gls-model}
+# GLS MODEL (AR(1) correlation structure via nlme)
+gls_model <- gls(Weekly_Sales ~ Temperature + Fuel_Price + CPI + Unemployment,
+                 data        = data,
+                 correlation = corAR1())
+
+summary(gls_model)
+```
+
+```{r ols-gls-comparison}
+# OLS vs GLS COMPARISON
+ols_coef <- coef(summary(model))
+gls_coef <- summary(gls_model)$tTable
+
+comparison <- data.frame(
+  Variable  = rownames(ols_coef),
+  OLS_Coeff = ols_coef[, "Estimate"],
+  GLS_Coeff = gls_coef[, "Value"])
+
+comparison
+```
+
+```{r estimate-rho}
+# ESTIMATE RHO FROM RESIDUALS
+rho <- sum(e[-1] * e[-length(e)]) / sum(e[-length(e)]^2)
+rho
+```
+
+```{r cochrane-orcutt}
+# MANUAL COCHRANE-ORCUTT TRANSFORMATION
+Y  <- data$Weekly_Sales
+X1 <- data$Temperature
+X2 <- data$Fuel_Price
+X3 <- data$CPI
+X4 <- data$Unemployment
+
+# Quasi-differenced variables: Y*_t = Y_t - rho * Y_{t-1}
+Y_star  <- Y[-1]  - rho * Y[-length(Y)]
+X1_star <- X1[-1] - rho * X1[-length(X1)]
+X2_star <- X2[-1] - rho * X2[-length(X2)]
+X3_star <- X3[-1] - rho * X3[-length(X3)]
+X4_star <- X4[-1] - rho * X4[-length(X4)]
+
+# OLS on transformed model = Cochrane-Orcutt GLS
+model_gls_manual <- lm(Y_star ~ X1_star + X2_star + X3_star + X4_star)
+
+summary(model_gls_manual)
+```
+
+```{r refined-model}
+# REFINED MODEL (Fuel_Price removed — consistently insignificant)
+model_gls_manual_refined <- lm(Y_star ~ X1_star + X2_star + X4_star)
+
+summary(model_gls_manual_refined)
+```
